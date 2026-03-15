@@ -93,7 +93,7 @@ def run_prediction(image: Image.Image, interpreter):
     return predictions, predicted_index, confidence
 
 def show_results(image: Image.Image, predictions, predicted_index, confidence, class_names):
-    st.image(image, caption="Selected Image", width="stretch")
+    st.image(image, caption="Selected Image")
 
     label = get_label(class_names, predicted_index)
 
