@@ -1,5 +1,6 @@
 streamlit
-tensorflow
-pandas
 numpy
+pandas
 pillow
+tflite-runtime; platform_system != "Windows"
+tensorflow; platform_system == "Windows"

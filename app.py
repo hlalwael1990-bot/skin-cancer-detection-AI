@@ -1,9 +1,16 @@
 import os
 import json
 import numpy as np
+import pandas as pd
 import streamlit as st
 from PIL import Image
-from tflite_runtime.interpreter import Interpreter
+
+# حاول استخدام tflite_runtime أولًا، وإذا لم يوجد استخدم tensorflow
+try:
+    from tflite_runtime.interpreter import Interpreter
+except ImportError:
+    import tensorflow as tf
+    Interpreter = tf.lite.Interpreter
 
 MODEL_PATH = "model/model.tflite"
 CLASS_PATH = "model/class_names.json"
@@ -19,21 +26,47 @@ st.set_page_config(
 
 @st.cache_resource
 def load_interpreter():
-    interpreter = Interpreter(model_path=MODEL_PATH)
-    interpreter.allocate_tensors()
-    return interpreter
+    try:
+        interpreter = Interpreter(model_path=MODEL_PATH)
+        interpreter.allocate_tensors()
+        return interpreter
+    except Exception as e:
+        st.error(f"Failed to load TFLite model: {e}")
+        st.stop()
 
 
 @st.cache_data
 def load_class_names():
-    with open(CLASS_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(CLASS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        st.error(f"Failed to load class names: {e}")
+        st.stop()
 
 
-def preprocess_image(image: Image.Image):
+def get_label(class_names, index):
+    if isinstance(class_names, list):
+        return class_names[index]
+    if isinstance(class_names, dict):
+        return class_names.get(str(index), f"Class {index}")
+    return f"Class {index}"
+
+
+def preprocess_image(image: Image.Image, interpreter):
     image = image.convert("RGB")
     image = image.resize(IMG_SIZE)
-    arr = np.array(image, dtype=np.float32) / 255.0
+
+    input_details = interpreter.get_input_details()
+    input_dtype = input_details[0]["dtype"]
+
+    arr = np.array(image)
+
+    if input_dtype == np.float32:
+        arr = arr.astype(np.float32) / 255.0
+    else:
+        arr = arr.astype(input_dtype)
+
     arr = np.expand_dims(arr, axis=0)
     return arr
 
@@ -48,41 +81,52 @@ def predict_tflite(interpreter, input_data):
     return output_data
 
 
-def run_prediction(image: Image.Image, interpreter):
-    input_image = preprocess_image(image)
-    predictions = predict_tflite(interpreter, input_image)
+def postprocess_predictions(raw_output):
+    raw_output = np.array(raw_output, dtype=np.float32)
 
-    predicted_index = int(np.argmax(predictions[0]))
-    confidence = float(predictions[0][predicted_index]) * 100
+    if (
+        np.any(raw_output < 0)
+        or np.any(raw_output > 1)
+        or not np.isclose(np.sum(raw_output), 1.0, atol=1e-2)
+    ):
+        exp_vals = np.exp(raw_output - np.max(raw_output))
+        raw_output = exp_vals / np.sum(exp_vals)
 
-    return predictions[0], predicted_index, confidence
+    return raw_output
+
+
+def run_prediction(image: Image.Image, interpreter, class_names):
+    input_image = preprocess_image(image, interpreter)
+    raw_predictions = predict_tflite(interpreter, input_image)[0]
+    predictions = postprocess_predictions(raw_predictions)
+
+    predicted_index = int(np.argmax(predictions))
+    confidence = float(predictions[predicted_index]) * 100
+
+    return predictions, predicted_index, confidence
 
 
 def show_results(image: Image.Image, predictions, predicted_index, confidence, class_names):
     st.image(image, caption="Selected Image", use_container_width=True)
 
-    label = class_names[predicted_index]
+    label = get_label(class_names, predicted_index)
 
-    if "melanoma" in label.lower():
-        st.error(f"Prediction: {label}")
-    else:
-        st.success(f"Prediction: {label}")
-
+    st.subheader(f"Prediction: {label}")
     st.info(f"Confidence: {confidence:.2f}%")
 
     st.subheader("Top 3 Predictions")
     top3_indices = np.argsort(predictions)[-3:][::-1]
 
     for i in top3_indices:
-        st.write(f"{class_names[i]}: {predictions[i] * 100:.2f}%")
+        st.write(f"{get_label(class_names, i)}: {predictions[i] * 100:.2f}%")
 
     st.subheader("Prediction Probabilities")
-
-    sorted_indices = np.argsort(predictions)[::-1]
-    for i in sorted_indices:
-        prob = float(predictions[i]) * 100
-        st.write(f"{class_names[i]}: {prob:.2f}%")
-        st.progress(min(int(prob), 100))
+    chart_df = pd.DataFrame(
+        {"Probability (%)": predictions * 100},
+        index=[get_label(class_names, i) for i in range(len(predictions))]
+    )
+    chart_df = chart_df.sort_values("Probability (%)", ascending=False)
+    st.bar_chart(chart_df)
 
     st.warning(
         "This AI prediction is for educational purposes only and does not replace medical diagnosis."
@@ -127,7 +171,7 @@ with tab1:
 
         with st.spinner("Running prediction..."):
             predictions, predicted_index, confidence = run_prediction(
-                image, interpreter
+                image, interpreter, class_names
             )
 
         show_results(image, predictions, predicted_index, confidence, class_names)
@@ -150,7 +194,7 @@ with tab2:
 
                 with st.spinner("Running prediction..."):
                     predictions, predicted_index, confidence = run_prediction(
-                        image, interpreter
+                        image, interpreter, class_names
                     )
 
                 show_results(image, predictions, predicted_index, confidence, class_names)
