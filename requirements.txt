@@ -1,6 +1,5 @@
 streamlit
+tensorflow-cpu==2.15.0
 numpy
 pandas
 pillow
-tflite-runtime; platform_system != "Windows"
-tensorflow; platform_system == "Windows"

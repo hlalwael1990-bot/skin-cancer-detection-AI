@@ -3,14 +3,8 @@ import json
 import numpy as np
 import pandas as pd
 import streamlit as st
+import tensorflow as tf
 from PIL import Image
-
-# حاول استخدام tflite_runtime أولًا، وإذا لم يوجد استخدم tensorflow
-try:
-    from tflite_runtime.interpreter import Interpreter
-except ImportError:
-    import tensorflow as tf
-    Interpreter = tf.lite.Interpreter
 
 MODEL_PATH = "model/model.tflite"
 CLASS_PATH = "model/class_names.json"
@@ -27,7 +21,7 @@ st.set_page_config(
 @st.cache_resource
 def load_interpreter():
     try:
-        interpreter = Interpreter(model_path=MODEL_PATH)
+        interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
         interpreter.allocate_tensors()
         return interpreter
     except Exception as e:
@@ -95,7 +89,7 @@ def postprocess_predictions(raw_output):
     return raw_output
 
 
-def run_prediction(image: Image.Image, interpreter, class_names):
+def run_prediction(image: Image.Image, interpreter):
     input_image = preprocess_image(image, interpreter)
     raw_predictions = predict_tflite(interpreter, input_image)[0]
     predictions = postprocess_predictions(raw_predictions)
@@ -131,9 +125,6 @@ def show_results(image: Image.Image, predictions, predicted_index, confidence, c
     st.warning(
         "This AI prediction is for educational purposes only and does not replace medical diagnosis."
     )
-
-    if st.button("Clear Result"):
-        st.rerun()
 
 
 st.markdown(
@@ -171,7 +162,7 @@ with tab1:
 
         with st.spinner("Running prediction..."):
             predictions, predicted_index, confidence = run_prediction(
-                image, interpreter, class_names
+                image, interpreter
             )
 
         show_results(image, predictions, predicted_index, confidence, class_names)
@@ -194,7 +185,7 @@ with tab2:
 
                 with st.spinner("Running prediction..."):
                     predictions, predicted_index, confidence = run_prediction(
-                        image, interpreter, class_names
+                        image, interpreter
                     )
 
                 show_results(image, predictions, predicted_index, confidence, class_names)
