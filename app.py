@@ -17,7 +17,6 @@ st.set_page_config(
     layout="centered"
 )
 
-
 @st.cache_resource
 def load_interpreter():
     try:
@@ -28,7 +27,6 @@ def load_interpreter():
         st.error(f"Failed to load TFLite model: {e}")
         st.stop()
 
-
 @st.cache_data
 def load_class_names():
     try:
@@ -38,14 +36,12 @@ def load_class_names():
         st.error(f"Failed to load class names: {e}")
         st.stop()
 
-
 def get_label(class_names, index):
     if isinstance(class_names, list):
         return class_names[index]
     if isinstance(class_names, dict):
         return class_names.get(str(index), f"Class {index}")
     return f"Class {index}"
-
 
 def preprocess_image(image: Image.Image, interpreter):
     image = image.convert("RGB")
@@ -64,7 +60,6 @@ def preprocess_image(image: Image.Image, interpreter):
     arr = np.expand_dims(arr, axis=0)
     return arr
 
-
 def predict_tflite(interpreter, input_data):
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
@@ -73,7 +68,6 @@ def predict_tflite(interpreter, input_data):
     interpreter.invoke()
     output_data = interpreter.get_tensor(output_details[0]["index"])
     return output_data
-
 
 def postprocess_predictions(raw_output):
     raw_output = np.array(raw_output, dtype=np.float32)
@@ -88,7 +82,6 @@ def postprocess_predictions(raw_output):
 
     return raw_output
 
-
 def run_prediction(image: Image.Image, interpreter):
     input_image = preprocess_image(image, interpreter)
     raw_predictions = predict_tflite(interpreter, input_image)[0]
@@ -99,9 +92,8 @@ def run_prediction(image: Image.Image, interpreter):
 
     return predictions, predicted_index, confidence
 
-
 def show_results(image: Image.Image, predictions, predicted_index, confidence, class_names):
-    st.image(image, caption="Selected Image", use_container_width=True)
+    st.image(image, caption="Selected Image", width="stretch")
 
     label = get_label(class_names, predicted_index)
 
@@ -125,7 +117,6 @@ def show_results(image: Image.Image, predictions, predicted_index, confidence, c
     st.warning(
         "This AI prediction is for educational purposes only and does not replace medical diagnosis."
     )
-
 
 st.markdown(
     """
@@ -152,18 +143,13 @@ class_names = load_class_names()
 tab1, tab2 = st.tabs(["Upload Image", "Sample Images"])
 
 with tab1:
-    uploaded_file = st.file_uploader(
-        "Upload an image",
-        type=["jpg", "jpeg", "png"]
-    )
+    uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 
     if uploaded_file is not None:
         image = Image.open(uploaded_file).convert("RGB")
 
         with st.spinner("Running prediction..."):
-            predictions, predicted_index, confidence = run_prediction(
-                image, interpreter
-            )
+            predictions, predicted_index, confidence = run_prediction(image, interpreter)
 
         show_results(image, predictions, predicted_index, confidence, class_names)
 
@@ -184,9 +170,7 @@ with tab2:
                 image = Image.open(image_path).convert("RGB")
 
                 with st.spinner("Running prediction..."):
-                    predictions, predicted_index, confidence = run_prediction(
-                        image, interpreter
-                    )
+                    predictions, predicted_index, confidence = run_prediction(image, interpreter)
 
                 show_results(image, predictions, predicted_index, confidence, class_names)
         else:
