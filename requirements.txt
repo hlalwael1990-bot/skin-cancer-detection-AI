@@ -2,3 +2,4 @@ streamlit
 tflite-runtime
 numpy
 pillow
+matplotlib

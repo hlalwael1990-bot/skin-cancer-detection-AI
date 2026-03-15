@@ -1,10 +1,9 @@
 import os
 import json
 import numpy as np
-import pandas as pd
 import streamlit as st
-import tensorflow as tf
 from PIL import Image
+from tflite_runtime.interpreter import Interpreter
 
 MODEL_PATH = "model/model.tflite"
 CLASS_PATH = "model/class_names.json"
@@ -20,7 +19,7 @@ st.set_page_config(
 
 @st.cache_resource
 def load_interpreter():
-    interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+    interpreter = Interpreter(model_path=MODEL_PATH)
     interpreter.allocate_tensors()
     return interpreter
 
@@ -49,7 +48,7 @@ def predict_tflite(interpreter, input_data):
     return output_data
 
 
-def run_prediction(image: Image.Image, interpreter, class_names):
+def run_prediction(image: Image.Image, interpreter):
     input_image = preprocess_image(image)
     predictions = predict_tflite(interpreter, input_image)
 
@@ -78,12 +77,12 @@ def show_results(image: Image.Image, predictions, predicted_index, confidence, c
         st.write(f"{class_names[i]}: {predictions[i] * 100:.2f}%")
 
     st.subheader("Prediction Probabilities")
-    chart_df = pd.DataFrame(
-        {"Probability (%)": predictions * 100},
-        index=class_names
-    )
-    chart_df = chart_df.sort_values("Probability (%)", ascending=False)
-    st.bar_chart(chart_df)
+
+    sorted_indices = np.argsort(predictions)[::-1]
+    for i in sorted_indices:
+        prob = float(predictions[i]) * 100
+        st.write(f"{class_names[i]}: {prob:.2f}%")
+        st.progress(min(int(prob), 100))
 
     st.warning(
         "This AI prediction is for educational purposes only and does not replace medical diagnosis."
@@ -128,7 +127,7 @@ with tab1:
 
         with st.spinner("Running prediction..."):
             predictions, predicted_index, confidence = run_prediction(
-                image, interpreter, class_names
+                image, interpreter
             )
 
         show_results(image, predictions, predicted_index, confidence, class_names)
@@ -151,7 +150,7 @@ with tab2:
 
                 with st.spinner("Running prediction..."):
                     predictions, predicted_index, confidence = run_prediction(
-                        image, interpreter, class_names
+                        image, interpreter
                     )
 
                 show_results(image, predictions, predicted_index, confidence, class_names)
