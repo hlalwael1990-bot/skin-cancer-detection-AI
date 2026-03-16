@@ -17,6 +17,30 @@ st.set_page_config(
     layout="centered"
 )
 
+# =========================
+# Title and Medical Warning
+# =========================
+
+st.title("Skin Cancer Detection")
+
+st.warning(
+    """
+⚠️ **Medical Disclaimer**
+
+This AI model is for **educational purposes only**.
+
+It may misclassify **normal skin or unrelated images**.
+
+Always consult a qualified medical professional.
+"""
+)
+
+st.write("Upload an image of a skin lesion to get a prediction.")
+
+# =========================
+# Load Model
+# =========================
+
 @st.cache_resource
 def load_interpreter():
     try:
@@ -27,6 +51,7 @@ def load_interpreter():
         st.error(f"Failed to load TFLite model: {e}")
         st.stop()
 
+
 @st.cache_data
 def load_class_names():
     try:
@@ -36,12 +61,18 @@ def load_class_names():
         st.error(f"Failed to load class names: {e}")
         st.stop()
 
+
 def get_label(class_names, index):
     if isinstance(class_names, list):
         return class_names[index]
     if isinstance(class_names, dict):
         return class_names.get(str(index), f"Class {index}")
     return f"Class {index}"
+
+
+# =========================
+# Image Preprocessing
+# =========================
 
 def preprocess_image(image: Image.Image, interpreter):
     image = image.convert("RGB")
@@ -60,14 +91,21 @@ def preprocess_image(image: Image.Image, interpreter):
     arr = np.expand_dims(arr, axis=0)
     return arr
 
+
+# =========================
+# Prediction
+# =========================
+
 def predict_tflite(interpreter, input_data):
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
 
     interpreter.set_tensor(input_details[0]["index"], input_data)
     interpreter.invoke()
+
     output_data = interpreter.get_tensor(output_details[0]["index"])
     return output_data
+
 
 def postprocess_predictions(raw_output):
     raw_output = np.array(raw_output, dtype=np.float32)
@@ -82,9 +120,11 @@ def postprocess_predictions(raw_output):
 
     return raw_output
 
+
 def run_prediction(image: Image.Image, interpreter):
     input_image = preprocess_image(image, interpreter)
     raw_predictions = predict_tflite(interpreter, input_image)[0]
+
     predictions = postprocess_predictions(raw_predictions)
 
     predicted_index = int(np.argmax(predictions))
@@ -92,7 +132,12 @@ def run_prediction(image: Image.Image, interpreter):
 
     return predictions, predicted_index, confidence
 
-def show_results(image: Image.Image, predictions, predicted_index, confidence, class_names):
+
+# =========================
+# Show Results
+# =========================
+
+def show_results(image, predictions, predicted_index, confidence, class_names):
     st.image(image, caption="Selected Image")
 
     label = get_label(class_names, predicted_index)
@@ -107,10 +152,12 @@ def show_results(image: Image.Image, predictions, predicted_index, confidence, c
         st.write(f"{get_label(class_names, i)}: {predictions[i] * 100:.2f}%")
 
     st.subheader("Prediction Probabilities")
+
     chart_df = pd.DataFrame(
         {"Probability (%)": predictions * 100},
         index=[get_label(class_names, i) for i in range(len(predictions))]
     )
+
     chart_df = chart_df.sort_values("Probability (%)", ascending=False)
     st.bar_chart(chart_df)
 
@@ -118,40 +165,46 @@ def show_results(image: Image.Image, predictions, predicted_index, confidence, c
         "This AI prediction is for educational purposes only and does not replace medical diagnosis."
     )
 
-st.markdown(
-    """
-    <h1 style='text-align: center; color: #4CAF50;'>
-    🧬 Skin Cancer Detection using CNN
-    </h1>
-    """,
-    unsafe_allow_html=True
-)
 
-st.markdown(
-    """
-    This application uses a **Convolutional Neural Network (CNN)** to classify skin lesion images.
-
-    You can either:
-    - upload your own skin image
-    - or test the model using sample images
-    """
-)
+# =========================
+# Load Model and Classes
+# =========================
 
 interpreter = load_interpreter()
 class_names = load_class_names()
 
+
+# =========================
+# Tabs
+# =========================
+
 tab1, tab2 = st.tabs(["Upload Image", "Sample Images"])
 
+
+# =========================
+# Upload Image
+# =========================
+
 with tab1:
-    uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+    uploaded_file = st.file_uploader(
+        "Upload an image",
+        type=["jpg", "jpeg", "png"]
+    )
 
     if uploaded_file is not None:
         image = Image.open(uploaded_file).convert("RGB")
 
         with st.spinner("Running prediction..."):
-            predictions, predicted_index, confidence = run_prediction(image, interpreter)
+            predictions, predicted_index, confidence = run_prediction(
+                image, interpreter
+            )
 
         show_results(image, predictions, predicted_index, confidence, class_names)
+
+
+# =========================
+# Sample Images
+# =========================
 
 with tab2:
     if os.path.exists(SAMPLE_DIR):
@@ -163,14 +216,19 @@ with tab2:
         )
 
         if sample_images:
-            selected_image = st.selectbox("Choose a sample image", sample_images)
+            selected_image = st.selectbox(
+                "Choose a sample image",
+                sample_images
+            )
 
             if st.button("Run prediction on sample image"):
                 image_path = os.path.join(SAMPLE_DIR, selected_image)
                 image = Image.open(image_path).convert("RGB")
 
                 with st.spinner("Running prediction..."):
-                    predictions, predicted_index, confidence = run_prediction(image, interpreter)
+                    predictions, predicted_index, confidence = run_prediction(
+                        image, interpreter
+                    )
 
                 show_results(image, predictions, predicted_index, confidence, class_names)
         else:
@@ -178,14 +236,31 @@ with tab2:
     else:
         st.warning("Skin_images folder was not found.")
 
+
+# =========================
+# Footer
+# =========================
+
 st.markdown("---")
+
+st.info(
+    """
+ℹ️ **Dataset Notice**
+
+The model was trained on **dermoscopic skin lesion images only**.
+
+Predictions on regular photos (e.g., mobile phone images) may be inaccurate.
+"""
+)
+
 st.markdown(
     """
-    ### About the Model
-    - Model type: CNN
-    - Deployment format: TensorFlow Lite
-    - Task: Multi-class skin lesion classification
+### About the Model
 
-    **Note:** This project is intended for educational and research purposes only.
-    """
+- Model type: CNN
+- Deployment format: TensorFlow Lite
+- Task: Multi-class skin lesion classification
+
+**Note:** This project is intended for educational and research purposes only.
+"""
 )
